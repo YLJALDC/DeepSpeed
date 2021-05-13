@@ -1,5 +1,5 @@
 
-def mp_table(type, volume, sb, nsb):
+def comm_table(type, volume, sb, nsb):
     """
         type: collective operation types: "allreduce" or "allgather"
         volume(int): communication volumne
@@ -13,9 +13,3 @@ def mp_table(type, volume, sb, nsb):
         raise
     else:
         raise
-
-def infer_batch_size(config):
-    pass
-
-def infer_sync_points(config):
-    pass
