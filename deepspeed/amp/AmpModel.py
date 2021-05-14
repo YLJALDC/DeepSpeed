@@ -88,11 +88,11 @@ class gpt2(AmpModel):
                     - backward allreduce: vh/p
                     
            -> Total (counting backward):
-              comp: 12nBSh/p * (6h + S) + 4BShv / p 
+              comp: 12nBSh/p * (6h + S) + 12BShv / p 
               comm: n*(7h^2/p + 2BSh) + BSh + vh/p
 
         """
-        t_mp_comp = 12 * n * bs * s * h / mp * (6 * h + s) + 4 * bs * s * h * v / mp
+        t_mp_comp = 12 * n * bs * s * h / mp * (6 * h + s) + 12 * bs * s * h * v / mp
         
         layer_comm_time = comm_table("allreduce", volume = (7 * h ** 2 / mp) + \
                      2 * comm_table("allreduce", volume = s * bs * h)
