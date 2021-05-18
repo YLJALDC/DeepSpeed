@@ -21,78 +21,78 @@ class gpt2(AmpModel):
         self.v = model_config["vocab_size"]
         
 
-        """Computation and Communication note:
-            
-            model = GPT2ModelPipe(num_tokentypes=0, parallel_output=True, topology=mpu.get_topology())
+    """Computation and Communication note:
 
-            A matrix multiplication of size A_{mxn}B_{nxk} involves 2mnk floating-point operations.
+        model = GPT2ModelPipe(num_tokentypes=0, parallel_output=True, topology=mpu.get_topology())
 
-            p: number of mp 
-            h: hidden size
-            B: batch size
-            S: sequence length
-            V: vocabulary size
-            n: number of layer
-            n_: number of attention heads (actually no affect on the final results)
+        A matrix multiplication of size A_{mxn}B_{nxk} involves 2mnk floating-point operations.
 
-            EmbeddingPipe: 
-                    (1)VocabParallelEmbedding
-                       - (B, S) * (v/p, h) -> (B, S, h) : 2BShv/p
+        p: number of mp 
+        h: hidden size
+        B: batch size
+        S: sequence length
+        V: vocabulary size
+        n: number of layer
+        n_: number of attention heads (actually no affect on the final results)
 
-                       - forward allreduce: BSh
+        EmbeddingPipe: 
+                (1)VocabParallelEmbedding
+                   - (B, S) * (v/p, h) -> (B, S, h) : 2BShv/p
 
-                    (2)position_embeddings
-                       - 2Bsh(max_position_embedding)/p
-                         max_position_embedding = 1024, v=50256. Can be ignored.
+                   - forward allreduce: BSh
 
-            ParallelTransformerLayerPipe:
-                     (1)ParallelSelfAttention
-                        (i) query_key_value transform: 
-                            - (S, B, h) * (h, 3h/p)-> (S, B, 3 * n_/p * h/n_): 2BS * (3h^2) / p = 6BSH^2 / p
-                            -backward allreduce (*): 3h^2 / p
+                (2)position_embeddings
+                   - 2Bsh(max_position_embedding)/p
+                     max_position_embedding = 1024, v=50256. Can be ignored.
 
-                        (ii) QK scores: 
-                            - (n_/p)  (B, S * h/n_) * (B, S * h/n_) -> (n_/p, B, S * S): 2(n_/p)BS^2(h/n_) = 2BS^2h / p
+        ParallelTransformerLayerPipe:
+                 (1)ParallelSelfAttention
+                    (i) query_key_value transform: 
+                        - (S, B, h) * (h, 3h/p)-> (S, B, 3 * n_/p * h/n_): 2BS * (3h^2) / p = 6BSH^2 / p
+                        -backward allreduce (*): 3h^2 / p
 
-                        (iii) context:
-                            - (n_/p) (B, S * S) * (B, S * h/n_) -> (n_/p, B, S * h/n_) = 2B(n_/p)S^2(h/n_) = 2BS^2h/p
+                    (ii) QK scores: 
+                        - (n_/p)  (B, S * h/n_) * (B, S * h/n_) -> (n_/p, B, S * S): 2(n_/p)BS^2(h/n_) = 2BS^2h / p
 
-                        (iv) dense:
-                            - (S, B, h/p) * (h/p, h) -> (S, B, h) = 2SBh^2/p
-                            - forward allreduce: BSh
+                    (iii) context:
+                        - (n_/p) (B, S * S) * (B, S * h/n_) -> (n_/p, B, S * h/n_) = 2B(n_/p)S^2(h/n_) = 2BS^2h/p
 
-                     (2)ParallelMLP
-                         (i) h to 4h:
-                             - (S, B, h) * (h, 4h/p) -> (S, B, 4h / p): 2BS * (4h^2) / p = 8BSh^2 / p
-                             - backward allreduce: 4h^2 / p
+                    (iv) dense:
+                        - (S, B, h/p) * (h/p, h) -> (S, B, h) = 2SBh^2/p
+                        - forward allreduce: BSh
 
-                         (ii) 4h to h:
-                             - (S, B, 4h / p) * (4h / p, h) -> (S, B, h) = SB (4h^2) / p = 8BSh^2 / p
-                             - forward allreduce: BSh
+                 (2)ParallelMLP
+                     (i) h to 4h:
+                         - (S, B, h) * (h, 4h/p) -> (S, B, 4h / p): 2BS * (4h^2) / p = 8BSh^2 / p
+                         - backward allreduce: 4h^2 / p
 
-            -> One layer of transformer:
-               Comp: 24BSh^2 / p + 4BS^2h/p
-               Comm: 7h^2 / p + 2BSh
+                     (ii) 4h to h:
+                         - (S, B, 4h / p) * (4h / p, h) -> (S, B, h) = SB (4h^2) / p = 8BSh^2 / p
+                         - forward allreduce: BSh
 
-            EmbeddingPipe: 
-                    - (S, B, h) * (h, v/p) -> (S, B, v/p) -> (S, B, v/p) = 2BShv/p
-                    - backward allreduce: vh/p
-                    
-           -> Total (counting backward):
-              comp: 12nBSh/p * (6h + S) + 12BShv / p 
-              comm: n*(7h^2/p + 2BSh) + BSh + vh/p
-          
-          PP note:
-              Deepspeed GPT2 model layers pattern:
-                  0: EmbeddingPipe
-                  1: lambda
-                  2~(num_layer+1): ParallelTransformerLayerPipe
-                  num_layer+2: lambda
-                  num_layer+3: FusedLayerNorm
-                  num_layer+4: EmbeddingPipe
-                  num_layer+5: fp16_to_fp32
-          
-          """
+        -> One layer of transformer:
+           Comp: 24BSh^2 / p + 4BS^2h/p
+           Comm: 7h^2 / p + 2BSh
+
+        EmbeddingPipe: 
+                - (S, B, h) * (h, v/p) -> (S, B, v/p) -> (S, B, v/p) = 2BShv/p
+                - backward allreduce: vh/p
+
+       -> Total (counting backward):
+          comp: 12nBSh/p * (6h + S) + 12BShv / p 
+          comm: n*(7h^2/p + 2BSh) + BSh + vh/p
+
+      PP note:
+          Deepspeed GPT2 model layers pattern:
+              0: EmbeddingPipe
+              1: lambda
+              2~(num_layer+1): ParallelTransformerLayerPipe
+              num_layer+2: lambda
+              num_layer+3: FusedLayerNorm
+              num_layer+4: EmbeddingPipe
+              num_layer+5: fp16_to_fp32
+
+    """
     
     def estimate(self, parallelism: Parallelism, bs, alpha, beta, gamma):
         rank_map, pp, dp, mp = parallelism.get_repr()
