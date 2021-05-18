@@ -1,7 +1,7 @@
 import torch
 from parallelism import parallelism
 from abc import ABC
-from util import comm_table
+from util import comm_table, rank2node
 
 class AmpModel(ABC):
     def __init__(self, model_config):
@@ -19,16 +19,7 @@ class gpt2(AmpModel):
         self.s = model_config["sequence_length"]
         self.n = model_config["num_layers"]
         self.v = model_config["vocab_size"]
-
-    def estimate(self, parallelism: Parallelism, bs, alpha, beta, gamma):
-        rank_map, dp, mp, pp = parallelism.get_repr()
-
-        h = self.model_config["hidden_size"]
-        s = self.model_config["sequence_length"]
-        n = self.model_config["num_layers"]
-        v = self.model_config["vocab_size"]
         
-        # mp part
 
         """Computation and Communication note:
             
@@ -90,8 +81,50 @@ class gpt2(AmpModel):
            -> Total (counting backward):
               comp: 12nBSh/p * (6h + S) + 12BShv / p 
               comm: n*(7h^2/p + 2BSh) + BSh + vh/p
+          
+          PP note:
+              Deepspeed GPT2 model layers pattern:
+                  0: EmbeddingPipe
+                  1: lambda
+                  2~(num_layer+1): ParallelTransformerLayerPipe
+                  num_layer+2: lambda
+                  num_layer+3: FusedLayerNorm
+                  num_layer+4: EmbeddingPipe
+                  num_layer+5: fp16_to_fp32
+          
+          """
+    
+    def estimate(self, parallelism: Parallelism, bs, alpha, beta, gamma):
+        rank_map, pp, dp, mp = parallelism.get_repr()
 
-        """
+        # a reverse map that maps rank to node
+        rank_node_map = rank2node(rank_map)
+
+        h = self.model_config["hidden_size"]
+        s = self.model_config["sequence_length"]
+        n = self.model_config["num_layers"]
+        v = self.model_config["vocab_size"]
+        
+        # this stores the mp+pp time for each data parallel replica 
+        mp_pp_time = [0] * dp
+
+        for i in range(dp):
+            # This loops analysis the runtime for a single dp replica
+            cur_mp_pp = 0
+            for j in range(pp):
+                
+                for k in range(mp):
+                    # (1) Get the rank of the current process
+                    # (2) Ask information of the current process
+
+                    parallelism.axis2rank(j, i, k)
+                
+                # plus the time for communication between pipeline
+                cur_mp_pp += 
+
+            mp_pp_time[i] = cur_mp_pp
+
+
         t_mp_comp = 12 * n * bs * s * h / mp * (6 * h + s) + 12 * bs * s * h * v / mp
         
         layer_comm_time = comm_table("allreduce", volume = (7 * h ** 2 / mp) + \

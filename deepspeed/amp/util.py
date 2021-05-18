@@ -13,3 +13,16 @@ def comm_table(type, volume, sb, nsb):
         raise
     else:
         raise
+
+"""
+Reverse mapping rank_map. For example, rank_map: {node1: [0,2], node2: [1,3]}
+results in {0 : node1, 2 : node1, 1 : node2, 3 : node2}
+"""
+def rank2node(rank_map):
+    ret = dict()
+    for k, v in rank_map.items():
+        for i in v:
+            ret[i] = k
+    return ret
+
+
