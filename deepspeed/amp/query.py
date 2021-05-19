@@ -24,7 +24,7 @@ Receive the configuration of a cluster and model, and return:
     (2) The placement group lists
 """
 
-def query_amp_topo(cluster, budget=50):
+def query_amp_topo(query_cluster, budget=50):
     
     #test_ranks = [2,0,3,5,7,1,4,6]
     #ret = dict()
@@ -34,6 +34,11 @@ def query_amp_topo(cluster, budget=50):
     #    count += 1
     
     #return ret, 4, 2
+
+    # The cluster information is global w.r.t our search.
+
+    global cluster
+    cluster = query_cluster
 
     args = parse_args()
     name = args.name

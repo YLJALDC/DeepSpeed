@@ -1,14 +1,34 @@
+"""
+Utility functions.
+"""
 
-def comm_table(type, volume, sb, nsb):
+def comm_table(type, volume, bandwidths):
     """
         type: collective operation types: "allreduce" or "allgather"
         volume(int): communication volumne
-        sb (int): slowest bandwidth
-        nsb (int): number of node that contains GPU with sb
+        sb (int): slowest bandwidth link
+        nsb (int): number of node that contains GPU with sb link
+    """
+    
+    # TODO: Double check this formula.
+    if type == "allreduce":
+        raise
+    """
+    slowest_link = float('inf')
+    slowest_link_nodes = set()
+    num_slowest_link = 0
+    for k, v in bandwidth_dict.items():
+        for _k, _v in bandwidth_dict.items():
+        # Assuming intra-node does not take time
+            if k != _k:
+                bandwidth = min(v, _v)
+                if bandwidth < slowest_link:
+                    slowest_link = bandwidth
+                    num_slowest_link = 1
+                elif bandwidth
+        #return 2 * (nsb - 1)* volume / (nsb * sb)
     """
 
-    if type == "allreduce":
-        return 2 * (nsb - 1)* volume / (nsb * sb)
     elif type == "allgather":
         raise
     else:
