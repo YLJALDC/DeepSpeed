@@ -99,7 +99,7 @@ class gpt2(AmpModel):
         https://github.com/microsoft/DeepSpeedExamples/blob/bdf8e59aede8c8e0577e8d4d557298ca8515268f/Megatron-LM-v1.1.5-3D_parallelism/megatron/mpu/cross_entropy.py#L28
         !!!_VocabParallelCrossEntropy(forward allreduce):
             (1) max logits: BS (ignore)
-            (2) all logits: BSv
+            (2) predicted logits: BS (ignore)
             (3) sum exp logits: BS (ignore)
 
         -> One layer of transformer:
@@ -189,10 +189,6 @@ class gpt2(AmpModel):
                         pass
                     else:
                         raise RuntimeError("Unknown layer type.")
-                
-                # add loss calculation
-                if j == (pp-1):
-                    cur_mp_pp += alpha * comm_table("allreduce", bs * s * v, bandwidth_dict)
                 
                 # plus the time for communication between pipeline.
                 # !!! If not last stage.
