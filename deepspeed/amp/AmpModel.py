@@ -57,15 +57,14 @@ class gpt2(AmpModel):
 
         EmbeddingPipe: 
                 (1)VocabParallelEmbedding
-                   - (B, S) * (v/p, h) -> (B, S, h) : 2BShv/p
+                   - (B, S) * (v/p, h) -> (B, S, h) : 2BS/p (embedding lookup, ignore)
 
                    - forward allreduce: BSh
 
                    - param count: h * v / p
 
                 (2)position_embeddings
-                   - 2Bsh(max_position_embedding)/p
-                     max_position_embedding = 1024, v=50256. Linear in s,h. Can be ignored.
+                   - 2BS (ignore)
 
         ParallelTransformerLayerPipe:
                  (1)ParallelSelfAttention
@@ -112,7 +111,7 @@ class gpt2(AmpModel):
                 - param: h*v/p
 
        -> Total (counting backward):
-          comp: 12nBSh/p * (6h + S) + 12BShv / p 
+          comp: 12nBSh/p * (6h + S) + 6BShv / p 
           comm: n*(7h^2/p + 2BSh) + BSh + vh/p
 
 
@@ -176,13 +175,12 @@ class gpt2(AmpModel):
                 for layer_id in range(parts[j], parts[j+1]):
                     layer_type = self._layer[layer_id]
                     if layer_type == "embed2h":
-                        cur_mp_pp += 2 * bs * s * h * v / mp
                         cur_mp_pp += alpha * comm_table("allreduce", bs * s * h, bandwidth_dict)
                     if layer_type == "embed2v":
-                        cur_mp_pp += 2 * bs * s * h * v / mp
+                        cur_mp_pp += 6 * bs * s * h * v / mp
                         cur_mp_pp += alpha * comm_table("allreduce", v * h / mp, bandwidth_dict)
                     elif layer_type == "transformer_layer":
-                        cur_mp_pp += (24 * bs * s * h ** 2 + 4 * bs * s ** 2 * h) / mp
+                        cur_mp_pp += (72 * bs * s * h ** 2 + 12 * bs * s ** 2 * h) / mp
                         cur_mp_pp += alpha * comm_table("allreduce", 7*h**2/mp + 2*bs*s*h, bandwidth_dict)
                     elif layer_type == "noop":
                         pass
