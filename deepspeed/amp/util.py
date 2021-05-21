@@ -12,8 +12,13 @@ def comm_table(type, volume, bandwidths):
     
     # TODO: Double check this formula.
     if type == "allreduce":
-        raise
+        return 1
+        #raise NotImplementedError()
+    else:
+        raise NotImplementedError()
+
     """
+
     slowest_link = float('inf')
     slowest_link_nodes = set()
     num_slowest_link = 0
@@ -28,11 +33,6 @@ def comm_table(type, volume, bandwidths):
                 elif bandwidth
         #return 2 * (nsb - 1)* volume / (nsb * sb)
     """
-
-    elif type == "allgather":
-        raise
-    else:
-        raise
 
 """
 Reverse mapping rank_map. For example, rank_map: {node1: [0,2], node2: [1,3]}

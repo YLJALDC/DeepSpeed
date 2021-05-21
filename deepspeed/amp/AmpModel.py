@@ -1,7 +1,6 @@
 import torch
-from parallelism import parallelism
-from abc import ABC
-from util import comm_table, rank2node
+from abc import ABC, abstractmethod
+from .util import comm_table, rank2node
 
 class AmpModel(ABC):
     def __init__(self, model_config):
@@ -9,12 +8,12 @@ class AmpModel(ABC):
         return
 
     @abstractmethod
-    def estimate(self, parallelism: Parallelism, bs, alpha, beta, gamma):
+    def estimate(self, parallelism, bs, alpha, beta, gamma):
         return
 
 class gpt2(AmpModel):
     def __init__(self, model_config):
-        super().init(model_config)
+        super().__init__(model_config)
         self.h = model_config["hidden_size"]
         self.s = model_config["sequence_length"]
         self.n = model_config["num_layers"]
@@ -119,14 +118,14 @@ class gpt2(AmpModel):
 
     """
     
-    def estimate(self, parallelism: Parallelism, bs, alpha, beta, gamma):
+    def estimate(self, parallelism, cluster, bs, alpha, beta, gamma):
         
         # cluster should be set at the entry point of amp.
-        assert cluster is not None
         cluster_info = cluster.get_info()
 
         rank_map, pp, dp, mp, parts = parallelism.get_repr()
         
+        print(rank_map, pp, dp, mp, parts)
         # a reverse map that maps rank to node
         rank_node_map = rank2node(rank_map)
 
@@ -169,7 +168,7 @@ class gpt2(AmpModel):
 
                 for k in range(mp):
                     # get the rank and information of current GPU.
-                    cur_rank = parallelism.axis2rank(j, i, k)
+                    cur_rank = parallelism.axis2rank((j, i, k))
                     cur_node = rank_node_map[cur_rank]
                     cur_bandwidth = cluster_info[cur_node]["bandwidth"] 
                     bandwidth_dict[cur_node] = cur_bandwidth
@@ -195,8 +194,8 @@ class gpt2(AmpModel):
                 if j != (pp -1):
                     slowest_bandwidth = float('inf')
                     for k in range(mp):
-                        cur_rank = parallelism.axis2rank(j, i, k)
-                        peer_rank = parallelism.axis2rank(j+1, i, k)
+                        cur_rank = parallelism.axis2rank((j, i, k))
+                        peer_rank = parallelism.axis2rank((j+1, i, k))
                         cur_node = rank_node_map[cur_rank]
                         peer_node = rank_node_map[peer_rank]
                     
@@ -222,7 +221,7 @@ class gpt2(AmpModel):
         max_dp_time = 0
         for i in range(pp):
             param_count = 0
-            for layer_id in range(parts[i], parts[i+1):
+            for layer_id in range(parts[i], parts[i+1]):
                 layer_type = self._layer[layer_id]
                 if layer_type == "embed2h" or layer_type == "embed2v":
                     param_count += h * v / mp
@@ -236,7 +235,7 @@ class gpt2(AmpModel):
             for j in range(mp):
                 bandwidth_dict = {}
                 for k in range(dp):
-                    cur_rank = parallelism.axis2rank(i, k, j)
+                    cur_rank = parallelism.axis2rank((i, k, j))
                     cur_node = rank_node_map[cur_rank]
                     cur_bandwidth = cluster_info[cur_node]["bandwidth"] 
                     bandwidth_dict[cur_node] = cur_bandwidth

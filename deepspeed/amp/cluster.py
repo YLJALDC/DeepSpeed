@@ -2,7 +2,7 @@ import yaml
 from collections import defaultdict
 
 class cluster():
-    def __init__(self, resource_file="./resource.yml"):
+    def __init__(self, resource_file):
         self.resource_file = resource_file
         self.cluster_info = defaultdict(dict)
         self._parse_resource()

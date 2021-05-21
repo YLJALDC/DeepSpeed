@@ -1,7 +1,7 @@
 import argparse
-from AmpModel import gpt2
-from optimizer import optimizer
-
+from .AmpModel import gpt2
+from .optimizer import optimizer
+from .cluster import cluster as cl
 def parse_args():
 
     parser = argparse.ArgumentParser(description='Runtime analysis.')
@@ -24,7 +24,7 @@ Receive the configuration of a cluster and model, and return:
     (2) The placement group lists
 """
 
-def query_amp_topo(query_cluster, budget=50):
+def query_amp_topo(cluster_resource, model_config, budget=50):
     
     #test_ranks = [2,0,3,5,7,1,4,6]
     #ret = dict()
@@ -38,14 +38,15 @@ def query_amp_topo(query_cluster, budget=50):
     # The cluster information is global w.r.t our search.
 
     global cluster
-    cluster = query_cluster
-
-    args = parse_args()
-    name = args.name
+    cluster = cl(cluster_resource)
+    print(globals()["cluster"]) 
+    name = model_config["name"]
     if name == "gpt2":
-        model_config = {"hidden_size" : 1024, "sequence_length": 512, "vocab_size": 50256}
         model = gpt2(model_config)
-   
-    optimizer = optimizer(model, budget)
-    return optimizer.get_optimal()
+    else:
+        raise NotImplementedError()
+
+    optim = optimizer(model, cluster, budget)
+    optim.optimize()
+    return optim.get_optimal()
 

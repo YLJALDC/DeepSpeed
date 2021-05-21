@@ -2,9 +2,8 @@
 Stores information for each dimension of parallelism
 """
 class parallelism():
-    def __init__(self, bs: int, pp: int, dp: int, mp: int, pp_parts: list):
+    def __init__(self, pp: int, dp: int, mp: int, pp_parts: list, rank_map: dict):
         
-        self.bs = bs
         self.pp = pp
         self.dp = dp
         self.mp = mp
@@ -19,17 +18,9 @@ class parallelism():
 
         """
 
-        self.rank_map = dict()
-        self.pp_parts = pp_parts
-
-   
-    """
-    Should be set from optimizer. A valid rank map looks like:
-    {node_1: [1,2], node_2: [3,0], ...}
-    """
-    def set_rank_map(self, rank_map):
         self._check_valid_rank(rank_map)
         self.rank_map = rank_map
+        self.pp_parts = pp_parts
 
     """
     Check whether the rank_map is a valid permutation from 0 to num(gpu)-1.
@@ -39,9 +30,9 @@ class parallelism():
         for k, v in rank_map.items():
             base.extend(v)
 
-        validity = (sorted(base) == list(range(len(base))))
-        bijection = (len(rank_map) == self.dp * self.mp * self.pp)
-        assert validity && bijection, "rank map is not a permutation from 0 to num_gpus-1."
+        bijection = (len(rank_map) == self.pp * self.dp * self.mp)
+        validity = (sorted(base) == list(range(len(base)))) 
+        assert validity and bijection, "rank map is not a permutation from 0 to num_gpus-1."
 
     """
     Returns this as (rank_map, pp, dp, mp, pp_config)
