@@ -12,8 +12,13 @@ def comm_table(type, volume, bandwidths):
     
     # TODO: Double check this formula.
     if type == "allreduce":
-        return 1
-        #raise NotImplementedError()
+        n = len(bandwidths)
+        bandwidth_list = list(bandwidths.values())
+
+        time = 0
+        for i in range(n):
+            time += 1 / min(bandwidth_list[i], bandwidth_list[(i+1)%n])
+        return time * volume / n
     else:
         raise NotImplementedError()
 
@@ -45,4 +50,18 @@ def rank2node(rank_map):
             ret[i] = k
     return ret
 
+def factor(integer):
+    factors = []
+    for i in range(1,integer+1):
+        if integer % i == 0:
+            factors.append(i)
+    return factors
 
+def estimate_alpha():
+    pass
+
+def estimate_beta():
+    pass
+
+def estimate_gamma():
+    return 0

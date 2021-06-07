@@ -124,7 +124,7 @@ class gpt2(AmpModel):
 
         rank_map, pp, dp, mp, parts = parallelism.get_repr()
         
-        print(rank_map, pp, dp, mp, parts)
+        #print(rank_map, pp, dp, mp, parts)
         # a reverse map that maps rank to node
         rank_node_map = rank2node(rank_map)
 
@@ -171,12 +171,12 @@ class gpt2(AmpModel):
                     cur_node = rank_node_map[cur_rank]
                     cur_bandwidth = cluster_info[cur_node]["bandwidth"] 
                     bandwidth_dict[cur_node] = cur_bandwidth
-
+                
                 for layer_id in range(parts[j], parts[j+1]):
                     layer_type = self._layer[layer_id]
                     if layer_type == "embed2h":
                         cur_mp_pp += alpha * comm_table("allreduce", bs * s * h, bandwidth_dict)
-                    if layer_type == "embed2v":
+                    elif layer_type == "embed2v":
                         cur_mp_pp += 6 * bs * s * h * v / mp
                         cur_mp_pp += alpha * comm_table("allreduce", v * h / mp, bandwidth_dict)
                     elif layer_type == "transformer_layer":
@@ -248,3 +248,13 @@ class gpt2(AmpModel):
         max_dp_time *= beta
 
         return max_mp_pp_time + max_dp_time
+    
+    # a heuristic split for pipeline
+    def uniform_split(self, pp):
+        parts = [0]
+        each = self.n // pp
+        for i in range(1, pp):
+            parts.append(2 + i * each)
+        parts.append(len(self._layer))
+        return parts
+

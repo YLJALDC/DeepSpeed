@@ -1,6 +1,6 @@
 import argparse
 from .AmpModel import gpt2
-from .optimizer import optimizer
+from .optimizer import optimizer, MCMCOptimizer
 from .cluster import cluster as cl
 def parse_args():
 
@@ -37,16 +37,14 @@ def query_amp_topo(cluster_resource, model_config, budget=50):
 
     # The cluster information is global w.r.t our search.
 
-    global cluster
     cluster = cl(cluster_resource)
-    print(globals()["cluster"]) 
+    print(cluster.get_info()) 
     name = model_config["name"]
     if name == "gpt2":
         model = gpt2(model_config)
     else:
         raise NotImplementedError()
 
-    optim = optimizer(model, cluster, budget)
-    optim.optimize()
-    return optim.get_optimal()
+    optim = MCMCOptimizer(model, cluster, budget)
+    return optim.optimize()
 

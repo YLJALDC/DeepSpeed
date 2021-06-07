@@ -1,4 +1,7 @@
+import numpy as np
 from .parallelism import parallelism
+from .util import factor
+
 class optimizer():
     def __init__(self, model, cluster, budget):
         # cost model parameter
@@ -33,15 +36,6 @@ class optimizer():
         mp = 2
         parts = [0, 14, 30]
         
-        rank_map = {"h0.ray-dev8.BigLearning": [0],
-                    "h1.ray-dev8.BigLearning": [1],
-                    "h2.ray-dev8.BigLearning": [2],
-                    "h3.ray-dev8.BigLearning": [3],
-                    "h4.ray-dev8.BigLearning": [4],
-                    "h5.ray-dev8.BigLearning": [5],
-                    "h6.ray-dev8.BigLearning": [6],
-                    "h7.ray-dev8.BigLearning": [7],
-                     }
 
         return parallelism(pp, dp, mp, parts, rank_map)
 
@@ -88,3 +82,93 @@ class optimizer():
                 best_throughput = throughput
                 best_setting = sample
         return best_setting
+
+class MCMCOptimizer():
+    def __init__(self, model, cluster, budget):
+        # cost model parameter
+        self._alpha = 1
+        self._beta = 1
+        self._gamma = 0
+
+        self._MCMC_BETA = 1
+
+        # future parameter that counts overlap
+        self._theta = 1
+
+        # maximum number of trials
+        self._budget = budget
+        
+        self._model = model
+        
+        # throughput estimator
+        self._estimator = model.estimate
+
+        # hard coded number of runs to get the optimal setting
+        self._optimal_budget = 1000
+          
+        self._cluster = cluster
+        self._world_size = len(self._cluster.get_info().keys())
+
+    """
+        propose a valid 3d parallelism configuration
+    """
+    def _propose(self):
+        factors = factor(self._world_size)
+        
+        pp = np.random.choice(factors)
+        factors = factor(self._world_size // pp)
+
+        dp = np.random.choice(factors)
+        mp = self._world_size // (pp * dp)
+        
+        
+        # keep parts for uniform split and rank_map constant for now
+        parts = self._model.uniform_split(pp)
+
+        rank_map = {}
+        rank = 0
+        for key, value in self._cluster.get_info().items():
+            rank_map[key] = [rank]
+            rank += 1
+
+        return parallelism(pp, dp, mp, parts, rank_map)
+    
+    """
+        Optimize based on available trials.
+    """
+    def optimize(self):
+        estimate_time = dict()
+
+        cur = self._propose()
+        cur_t = self._estimator(cur, self._cluster, 8, self._alpha, self._beta, self._gamma)
+       
+        best = cur
+        best_t = cur_t
+
+        estimate_time[cur] = cur_t
+        
+        for i in range(self._budget):
+            # get a new proposal
+            next = self._propose()
+            next_t = self._estimator(next, self._cluster, 8, self._alpha, self._beta, self._gamma)
+            acc_p = min(1, np.exp(self._MCMC_BETA * (cur_t - next_t)))
+
+            rand = np.random.uniform(0, 1)
+            if rand < acc_p:
+                cur = next
+                cur_t = next_t
+
+            if cur_t < best_t:
+                best_t = cur_t
+                best = cur
+            
+            _, pp, dp, mp, _ = next.get_repr()
+            
+            if next not in estimate_time.keys():
+                estimate_time[(pp,dp,mp)] = next_t
+            else:
+                assert next_t == estimate_time[(pp,dp,mp)], "estimator not deterministic"
+
+        sorted_estimation = dict(sorted(estimate_time.items(), key=lambda item: item[1]))
+        print(sorted_estimation)
+        return best
