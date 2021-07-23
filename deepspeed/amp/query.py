@@ -24,7 +24,7 @@ Receive the configuration of a cluster and model, and return:
     (2) The placement group lists
 """
 
-def query_amp_topo(cluster_resource, model_config, budget=50):
+def query_amp_topo(cluster_resource, model_config, bs, budget=50):
     
     #test_ranks = [2,0,3,5,7,1,4,6]
     #ret = dict()
@@ -45,6 +45,7 @@ def query_amp_topo(cluster_resource, model_config, budget=50):
     else:
         raise NotImplementedError()
 
-    optim = MCMCOptimizer(model, cluster, budget)
+    #optim = MCMCOptimizer(model, cluster, bs, budget)
+    optim = HeuristicOptimizer(model, cluster, bs, budget)
     return optim.optimize()
 

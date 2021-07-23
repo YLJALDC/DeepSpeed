@@ -1,15 +1,25 @@
 import torch
 from abc import ABC, abstractmethod
+import numpy as np
 from .util import comm_table, rank2node
 
 class AmpModel(ABC):
     def __init__(self, model_config):
         self.model_config = model_config
+        self._num_layer = -1
         return
 
     @abstractmethod
     def estimate(self, parallelism, bs, alpha, beta, gamma):
         return
+
+    def get_num_layer(self):
+        assert self._num_layer != -1
+        return self._num_layer
+    
+    def get_cost_e(self):
+        return
+
 
 class gpt2(AmpModel):
     def __init__(self, model_config):
@@ -18,7 +28,7 @@ class gpt2(AmpModel):
         self.s = model_config["sequence_length"]
         self.n = model_config["num_layers"]
         self.v = model_config["vocab_size"]
-        
+                
       
         """
         PP note:
@@ -39,6 +49,7 @@ class gpt2(AmpModel):
             self._layer.append("transformer_layer")
         
         self._layer.extend(["noop","noop", "embed2v", "noop"])
+        self._num_layer = len(self._layer)
 
 
     """Computation and Communication note:
@@ -258,3 +269,44 @@ class gpt2(AmpModel):
         parts.append(len(self._layer))
         return parts
 
+    # cost to execute each layer, proportional to the number of floating points contained
+    def get_cost_e(self, bs, mp):
+        cost_e = []
+        h = self.model_config["hidden_size"]
+        s = self.model_config["sequence_length"]
+        n = self.model_config["num_layers"]
+        v = self.model_config["vocab_size"]
+        
+        for layer_id in range(self._layer):
+            layer_type = self._layer[layer_id]
+            if layer_type == "embed2v":
+                cost_e.append(6 * bs * s * h * v / mp)
+            elif layer_type == "transformer_layer":
+                cost_e.append((72 * bs * s * h ** 2 + 12 * bs * s ** 2 * h) / mp)
+            elif layer_type == "noop" or layer_type == "embed2h":
+                cost_e.append(0)
+            else:
+                raise RuntimeError("Unknown layer type.")
+        return cost_e
+
+    def get_cost_c(self, bs, mp, bandwidths):
+        assert isinstance(bandwidths, np.array)
+        
+        cost_c  = []
+        
+        last_volume = 0
+        for i in range(len(self._layer)):
+            layer_type = self._layer[i]
+            if layer_type == "embed2h" or layer_type == "transformer_layer":
+                last_volume = s * h
+            elif layer_type == "embed2v":
+                last_volume = s * v / mp
+            elif layer_type == "noop":
+                pass
+            else:
+                raise RuntimeError("Unknown layer type.")
+            
+            cost_c.append(last_volume / bandwidths)
+
+        # drop the last communication cost because last layer is always in the last pipeline stage
+        return cost_c[:-1]
