@@ -216,7 +216,6 @@ class ProcessTopology:
     def __str__(self):
         return str(self.mapping)
 
-
 def _prime_factors(N):
     """ Returns the prime factorization of positive integer N. """
     if N <= 0:
@@ -231,6 +230,9 @@ def _prime_factors(N):
                 break
     return primes
 
+class AmpTopology(ProcessTopology):
+    def __init__(dp_group, mp_group, pp_group):
+        pass
 
 class PipeDataParallelTopology(ProcessTopology):
     """ A topology specialiation for hybrid data and pipeline parallelism.

@@ -4,6 +4,7 @@ import time
 import logging
 import copy
 import os
+import sys
 
 from types import MethodType
 
@@ -65,6 +66,8 @@ class PipelineEngine(DeepSpeedEngine):
 
         # Set Grid and Communication Groups
         self.grid = self.module._grid
+#        print(self.grid)
+#        assert False
         if self.grid.get_global_rank() == 0:
             logger.info(f'CONFIG: micro_batches={self.micro_batches} '
                         f'micro_batch_size={self.micro_batch_size}')
@@ -277,6 +280,8 @@ class PipelineEngine(DeepSpeedEngine):
 
         # Do the work
         self.timers('train_batch').start()
+        if torch.distributed.get_rank() == 0:
+            print("Using Train Schedule.")
         sched = schedule.TrainSchedule(micro_batches=self.micro_batches,
                                        stages=self.num_stages,
                                        stage_id=self.stage_id)
@@ -286,7 +291,7 @@ class PipelineEngine(DeepSpeedEngine):
 
         if self.global_steps % self.steps_per_print() == 0:
             if self.global_rank == 0:
-                elapsed = self.timers('train_batch').elapsed(reset=True)
+                elapsed,_ = self.timers('train_batch').elapsed(reset=True)
                 iter_time = elapsed / self.steps_per_print()
                 tput = self.train_batch_size() / iter_time
                 print(f'steps: {self.global_steps} '
@@ -312,9 +317,12 @@ class PipelineEngine(DeepSpeedEngine):
                 'pipe_send_grad',
                 'pipe_recv_input',
                 'pipe_recv_grad'
-            ])
+            ], normalizer=self.steps_per_print())
 
         # TODO: should return precisely what loss returned and allow others to be queried?
+        
+        if self.global_steps == 101:
+           sys.exit() 
         return self.agg_train_loss
 
     def eval_batch(self, data_iter):
@@ -390,7 +398,6 @@ class PipelineEngine(DeepSpeedEngine):
         if self.is_last_stage():
             loss = self._scale_loss(self.total_loss)
             self.dp_group_loss = loss.clone().detach()
-
             ## Average loss across all data-parallel groups
             agg_loss = self.dp_group_loss.clone().detach()
             #print(f'RANK={self.global_rank} bcast SENDER src={self.global_rank} group={self.grid.pp_group}', flush=True)
@@ -472,6 +479,7 @@ class PipelineEngine(DeepSpeedEngine):
         if mp_rank == 0:
             if self.data_iterator is None:
                 raise ValueError(f"RANK={self.global_rank} no data iterator provided.")
+            assert isinstance(self.data_iterator, torch.utils.data.dataloader._MultiProcessingDataLoaderIter)
             batch = next(self.data_iterator)
 
         # All MP ranks participate in batch_fn, where they might broadcast the data.
@@ -561,7 +569,7 @@ class PipelineEngine(DeepSpeedEngine):
             self.timers('backward').start()
             self.timers('backward_inner_microstep').start()
             self.timers('backward_inner').start()
-
+        #print("--------calling parent backward-------------")
         # Reconstruct if we previously partitioned the output. We must be
         # careful to also restore the computational graph of the tensors we partitioned.
         if self.is_pipe_partitioned:
@@ -977,7 +985,7 @@ class PipelineEngine(DeepSpeedEngine):
                     'backward_allreduce_microstep',
                     'backward_tied_allreduce_microstep',
                     'step_microstep'
-                ])
+                ], normalizer=self.steps_per_print())
             if self.global_steps % self.steps_per_print() == 0:
                 self.timers.log([
                     'forward',
@@ -985,7 +993,7 @@ class PipelineEngine(DeepSpeedEngine):
                     'backward_inner',
                     'backward_allreduce',
                     'step'
-                ])
+                ], normalizer=self.steps_per_print())
 
     def _zero_grads(self, inputs):
         if isinstance(inputs, torch.Tensor):

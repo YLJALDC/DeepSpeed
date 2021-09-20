@@ -187,6 +187,7 @@ class DeepSpeedEngine(Module):
         # Bookkeeping for csr support
         self.csr_tensor_module_names = set()
         if self.sparse_gradients_enabled():
+            assert False
             for name, module in self.module.named_modules():
                 if isinstance(module, torch.nn.Embedding):
                     self.csr_tensor_module_names.add(name + ".weight")
@@ -1133,7 +1134,7 @@ class DeepSpeedEngine(Module):
                 'backward_allreduce_microstep',
                 'step_microstep'
             ]
-            self.timers.log(names=timer_names, memory_breakdown=self.memory_breakdown())
+            #self.timers.log(names=timer_names, memory_breakdown=self.memory_breakdown())
 
             # Log timing
             if self.is_gradient_accumulation_boundary():
@@ -1161,14 +1162,14 @@ class DeepSpeedEngine(Module):
                             self.summary_writer.add_scalar(event[0], event[1], event[2])
                         self.summary_writer.flush()
 
-            if self.wall_clock_breakdown():
+            if self.wall_clock_breakdown() and (self.micro_steps+1) % 20 == 0:
                 self.timers.log([
                     'forward',
                     'backward',
                     'backward_inner',
                     'backward_allreduce',
                     'step'
-                ])
+                ], normalizer=20)
 
         self.micro_steps += 1
 
@@ -1242,6 +1243,7 @@ class DeepSpeedEngine(Module):
     def allreduce_no_retain(self, bucket, numel_per_bucket=500000000):
         small_bucket = []
         numel = 0
+        numel_per_bucket = 500000000
         for tensor in bucket:
             small_bucket.append(tensor)
             numel = numel + tensor.numel()

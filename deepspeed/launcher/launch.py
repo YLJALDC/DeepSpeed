@@ -76,7 +76,6 @@ def main():
     assert args.world_info != "None", "must provide world info dict"
     world_info = base64.urlsafe_b64decode(args.world_info)
     world_info = json.loads(world_info)
-
     logger.info("WORLD INFO DICT: {}".format(world_info))
     node_list = list(world_info.keys())
     args.nnodes = len(node_list)
@@ -92,12 +91,18 @@ def main():
     global_rank_mapping = defaultdict(list)
     curr_global_rank = 0
     dist_world_size = 0
+   
+    # query amp to get the rank mapping
+    #mp = 4
+    #pp = 2
+    #mapss = [0,1,3,5,7,2,4,6]
     for node_id in node_list:
-        gids = world_info[node_id]
-        dist_world_size += len(gids)
-        for gid in gids:
-            global_rank_mapping[node_id].append(curr_global_rank)
-            curr_global_rank += 1
+         gids = world_info[node_id]
+         dist_world_size += len(gids)
+         for gid in gids:
+             global_rank_mapping[node_id].append(curr_global_rank)
+             curr_global_rank += 1
+    #print(global_rank_mapping_)
     logger.info("global_rank_mapping={}".format(global_rank_mapping))
     logger.info("dist_world_size={}".format(dist_world_size))
     current_env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, local_gpu_ids))
@@ -122,7 +127,7 @@ def main():
             sys.executable,
             "-u",
             args.training_script,
-            "--local_rank={}".format(local_rank)
+            "--local_rank={}".format(local_rank),
         ] + args.training_script_args
 
         sig_names = {2: "SIGINT", 15: "SIGTERM"}

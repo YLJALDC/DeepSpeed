@@ -4,6 +4,7 @@ Copyright 2019 The Microsoft DeepSpeed Team
 
 import time
 import torch
+import numpy as np
 from deepspeed.utils.logging import log_dist
 
 from deepspeed.utils import logger
@@ -25,6 +26,7 @@ class SynchronizedWallClockTimer:
             self.elapsed_ = 0.0
             self.started_ = False
             self.start_time = time.time()
+            self.time_list = []
 
         def start(self):
             """Start the timer."""
@@ -37,13 +39,16 @@ class SynchronizedWallClockTimer:
             """Stop the timer."""
             assert self.started_, 'timer is not started'
             torch.cuda.synchronize()
-            self.elapsed_ += (time.time() - self.start_time)
+            this_elapsed = time.time() - self.start_time
+            self.elapsed_ += this_elapsed
             self.started_ = False
+            self.time_list.append(this_elapsed)
 
         def reset(self):
             """Reset timer."""
             self.elapsed_ = 0.0
             self.started_ = False
+            self.time_list = []
 
         def elapsed(self, reset=True):
             """Calculate the elapsed time."""
@@ -53,13 +58,14 @@ class SynchronizedWallClockTimer:
                 self.stop()
             # Get the elapsed time.
             elapsed_ = self.elapsed_
+            std = np.std((self.time_list))
             # Reset the elapsed time
             if reset:
                 self.reset()
             # If timing was in progress, set it back.
             if started_:
                 self.start()
-            return elapsed_
+            return elapsed_, std
 
     def __init__(self):
         self.timers = {}
@@ -87,10 +93,12 @@ class SynchronizedWallClockTimer:
         string = f'rank={torch.distributed.get_rank()} time (ms)'
         for name in names:
             if name in self.timers:
-                elapsed_time = self.timers[name].elapsed(
-                    reset=reset) * 1000.0 / normalizer
-                string += ' | {}: {:.2f}'.format(name, elapsed_time)
-
+                elapsed_time, elapsed_std = self.timers[name].elapsed(
+                    reset=reset) 
+                elapsed_std *= 1000.0
+                elapsed_time *= 1000.0
+                elapsed_time /= normalizer
+                string += ' | {}: {:.2f} ({:2f})'.format(name, elapsed_time,  elapsed_std)
         log_dist(string, ranks=ranks or [0])
 
 

@@ -57,7 +57,7 @@ class PDSHRunner(MultiNodeRunner):
         exports = ""
         for key, val in self.exports.items():
             exports += "export {}={}; ".format(key, val)
-
+        
         deepspeed_launch = [
             exports,
             "cd {};".format(os.path.abspath('.')),
@@ -70,7 +70,6 @@ class PDSHRunner(MultiNodeRunner):
             "--master_addr={}".format(self.args.master_addr),
             "--master_port={}".format(self.args.master_port)
         ]
-
         return pdsh_cmd_args + deepspeed_launch + [self.user_script
                                                    ] + self.user_arguments
 

@@ -16,7 +16,7 @@ def comm_table(type, volume, bandwidths):
         bandwidth_list = list(bandwidths.values())
 
         time = 0
-        for i in range(n):
+        for i in range(n-1):
             time += 1 / min(bandwidth_list[i], bandwidth_list[(i+1)%n])
         return time * volume / n
     else:

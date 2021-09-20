@@ -527,7 +527,6 @@ class DeepSpeedConfig(object):
                 object_pairs_hook=dict_raise_error_on_duplicate_keys)
         else:
             self._param_dict = param_dict
-
         try:
             self.global_rank = torch.distributed.get_rank()
             if mpu is None:
@@ -541,6 +540,7 @@ class DeepSpeedConfig(object):
         # If elastic-mode enabled, update compute + update _param_dict
         self.elasticity_enabled = elasticity_enabled(self._param_dict)
         if self.elasticity_enabled:
+            assert False
             logger.info("DeepSpeed elasticity support enabled")
             final_batch_size, valid_gpus, micro_batch_size = compute_elastic_config(
                 ds_config=self._param_dict,
@@ -590,10 +590,11 @@ class DeepSpeedConfig(object):
             self._param_dict[TRAIN_BATCH_SIZE] = final_batch_size
             self._param_dict[TRAIN_MICRO_BATCH_SIZE_PER_GPU] = micro_batch_size
             self._param_dict[GRADIENT_ACCUMULATION_STEPS] = gradient_accu_steps
-
         self._initialize_params(self._param_dict)
         self._configure_train_batch_size()
         self._do_sanity_check()
+        #assert self.gradient_accumulation_steps == 1
+        print(self.__dict__)
 
     def _initialize_params(self, param_dict):
         self.train_batch_size = get_train_batch_size(param_dict)
@@ -607,17 +608,20 @@ class DeepSpeedConfig(object):
         self.allreduce_always_fp32 = get_allreduce_always_fp32(param_dict)
         self.prescale_gradients = get_prescale_gradients(param_dict)
         self.gradient_predivide_factor = get_gradient_predivide_factor(param_dict)
-        self.sparse_gradients_enabled = get_sparse_gradients_enabled(param_dict)
+        self.sparse_gradients_enabled = get_sparse_gradients_enabled(param_dict)           
+        assert not self.sparse_gradients_enabled
 
         self.zero_config = DeepSpeedZeroConfig(param_dict)
         self.zero_optimization_stage = self.zero_config.stage
         self.zero_enabled = self.zero_optimization_stage > 0
-
+        print(f"zero is enabaled: {self.zero_enabled} ---------------")
+        assert not self.zero_enabled
         self.activation_checkpointing_config = DeepSpeedActivationCheckpointingConfig(
             param_dict)
 
         self.gradient_clipping = get_gradient_clipping(param_dict)
         self.fp16_enabled = get_fp16_enabled(param_dict)
+        #assert not self.fp16_enabled
         self.amp_enabled = get_amp_enabled(param_dict)
         self.amp_params = get_amp_params(param_dict)
         self.loss_scale = get_loss_scale(param_dict)
@@ -661,7 +665,8 @@ class DeepSpeedConfig(object):
         train_batch = self.train_batch_size
         micro_batch = self.train_micro_batch_size_per_gpu
         grad_acc = self.gradient_accumulation_steps
-
+        
+        print("ds check:", train_batch, micro_batch, grad_acc)
         assert train_batch > 0, \
             f'Train batch size: {train_batch} has to be greater than 0'
 
@@ -681,7 +686,6 @@ class DeepSpeedConfig(object):
         train_batch = self.train_batch_size
         micro_batch = self.train_micro_batch_size_per_gpu
         grad_acc = self.gradient_accumulation_steps
-
         #all values are provided nothing needs to be set
         if train_batch is not None and \
             micro_batch is not None and \
@@ -723,6 +727,9 @@ class DeepSpeedConfig(object):
         else:
             assert False, \
                 'Either train_batch_size or micro_batch_per_gpu needs to be provided'
+        # AMP: verify that gas is 1
+        if self.gradient_accumulation_steps is None or self.gradient_accumulation_steps != 1:
+            assert True, "GAS is not 1!"
 
     def _configure_train_batch_size(self):
         self._set_batch_related_parameters()

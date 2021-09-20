@@ -22,6 +22,7 @@ from .pipe import PipelineModule
 
 from .git_version_info import version, git_hash, git_branch
 
+from .amp import* 
 
 def _parse_version(version_str):
     '''Parse a version string and extract the major, minor, and patch versions.'''
@@ -104,6 +105,7 @@ def initialize(args=None,
         * ``lr_scheduler``: Wrapped lr scheduler if user ``lr_scheduler`` is passed, or
           if ``lr_scheduler`` specified in JSON configuration. Otherwise ``None``.
     """
+    print("--------------------------initializing deepspeed-------------------------------")
     log_dist("DeepSpeed info: version={}, git-hash={}, git-branch={}".format(
         __version__,
         __git_hash__,
@@ -113,6 +115,7 @@ def initialize(args=None,
     assert model is not None, "deepspeed.initialize requires a model"
 
     if not isinstance(model, PipelineModule):
+        print("Using deepspeed Engine without pipeline")
         engine = DeepSpeedEngine(args=args,
                                  model=model,
                                  optimizer=optimizer,
@@ -125,6 +128,7 @@ def initialize(args=None,
                                  config_params=config_params)
     else:
         assert mpu is None, "mpu must be None with pipeline parallelism"
+        print("using pipeline Engine")
         engine = PipelineEngine(args=args,
                                 model=model,
                                 optimizer=optimizer,

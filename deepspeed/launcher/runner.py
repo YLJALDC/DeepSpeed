@@ -352,8 +352,8 @@ def main(args=None):
                     for var in fd.readlines():
                         key, val = var.split('=')
                         runner.add_export(key, val)
-
         cmd = runner.get_cmd(env, active_resources)
+        
 
     logger.info("cmd = {}".format(' '.join(cmd)))
     result = subprocess.Popen(cmd, env=env)

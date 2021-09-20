@@ -270,7 +270,10 @@ class PipelineModule(nn.Module):
     def _find_layer_type(self, layername):
         idxs = []
         typeregex = regex.compile(layername, regex.IGNORECASE)
+
         for idx, layer in enumerate(self._layer_specs):
+            if self.global_rank == 0:
+                print(layer)
             name = None
             if isinstance(layer, LayerSpec):
                 name = layer.typename.__name__
@@ -287,6 +290,10 @@ class PipelineModule(nn.Module):
         if len(idxs) == 0:
             raise RuntimeError(
                 f"Partitioning '{layername}' found no valid layers to partition.")
+        if self.global_rank == 0:
+            print(idxs)
+            print(layername)
+            print(self._layer_specs)
         return idxs
 
     def forward(self, forward_input):
@@ -378,6 +385,7 @@ class PipelineModule(nn.Module):
 
         # Print some information on the partitioning.
         if self.global_rank == 0:
+            print(self.parts)
             for stage in range(num_stages):
                 start = self.parts[stage]
                 stop = self.parts[stage + 1]
@@ -399,7 +407,7 @@ class PipelineModule(nn.Module):
                     print(f'  loss: {self.loss_fn.__name__}')
                 except AttributeError:
                     print(f'  loss: {self.loss_fn.__class__.__name__}')
-
+        #assert False
         self._set_bounds(start=self.parts[stage_id], stop=self.parts[stage_id + 1])
 
     def allreduce_tied_weight_gradients(self):
